@@ -1,5 +1,5 @@
 [package]
 authors = ["Walt Ritscher <waltritscher@linkedin.com>"]
-edition = "20201"
+edition = "2021"
 name = "hello_actix"
 version = "0.1.0"
