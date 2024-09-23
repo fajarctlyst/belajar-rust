@@ -3,3 +3,14 @@ authors = ["Tim McNamara <tim@mcnamara.nz>"]
 edition = "2021"
 name = "hello_actix"
 version = "0.1.0"
+
+[[example]]
+name = "unit-conv"
+path = "examples/unit_converter.rs"
+
+[[example]]
+name = "flexibility"
+
+[dependencies]
+actix-web = "4.9.0"
+serde = { version = "1", features = ["derive"] }
