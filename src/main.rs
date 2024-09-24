@@ -1,80 +1,36 @@
-use actix_web::{get, guard, web, App, HttpServer};
-use actix_web::{post, web::Form, web::Json, HttpResponse};
-use serde::{Deserialize, Serialize};
+use actix_web::{get, web, App, HttpServer, Responder};
+use serde::Serialize;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Subscriber {
-    name: String,
-    email: String,
+#[derive(Serialize)]
+struct Temperature {
+    fahrenheit: f32,
+    celsius: f32,
 }
 
-#[post("/subscribe")]
-async fn subscribe(info: Form<Subscriber>) -> HttpResponse {
-    println!("🎉 new subscription: {:?}", info.into_inner());
-    HttpResponse::NoContent().finish()
+#[get("/to-celsius/{fahrenheit}")]
+async fn to_celsius(f: web::Path<f32>) -> impl Responder {
+    let f = f.into_inner();
+    let c = (f - 32.0) / 1.8;
+    web::Json(Temperature {
+        celsius: c,
+        fahrenheit: f,
+    })
 }
 
-async fn subscribe_with_json(info: Json<Subscriber>) -> HttpResponse {
-    println!("🎉 new subscription: {:?}", info.into_inner());
-    HttpResponse::NoContent().finish()
-}
-
-#[get("/")]
-async fn index() -> HttpResponse {
-    let webpage = r#"<!DOCTYPE html>
-<head>
-    <style>
-        * { font-family: sans-serif;}
-
-        form { display: table; }
-        form > div { display: table-row; }
-        input,label { display: table-cell; margin-bottom: 8px; }
-        label { padding-right: 1rem; }
-    </style>
-</head>
-<body>
-<p>A small webapp. Subscribe for more info.</p>
-
-<form action="/subscribe" method="POST">
-    <div>
-        <label for="n">Name:</label>
-        <input id="n" name="name" type="text" required>
-    </div>
-
-    <div>
-        <label for="e">Email:</label>
-        <input id="e" name="email" type="email" required>
-    </div>
-
-    <div>
-        <label>&nbsp;</label>
-        <input id=submit type=submit value="Subscribe"/>
-    </div>
-</form>
-</body>
-    "#;
-
-    HttpResponse::Ok().content_type("text/html").body(webpage)
-}
-
-#[get("/healthz")]
-async fn liveness() -> &'static str {
-    "ok\r\n"
+#[get("/to-fahrenheit/{celsius}")]
+async fn to_fahrenheit(c: web::Path<f32>) -> impl Responder {
+    let c = c.into_inner();
+    let f = 32.0 + (c * 1.8);
+    web::Json(Temperature {
+        celsius: c,
+        fahrenheit: f,
+    })
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let app = || {
-        App::new()
-            .service(index)
-            .service(
-                web::resource("/subscribe")
-                    .guard(guard::Header("Content-Type", "application/json"))
-                    .route(web::post().to(subscribe_with_json)),
-            )
-            .service(subscribe)
-            .service(liveness)
-    };
-
-    HttpServer::new(app).bind("127.0.0.1:8080")?.run().await
+    HttpServer::new(|| App::new().service(to_celsius).service(to_fahrenheit))
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
 }
