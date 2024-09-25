@@ -1,6 +1,21 @@
+use actix_web::dev::ServiceRequest;
+use actix_web::web::scope;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web_httpauth::extractors::basic::BasicAuth;
+use actix_web_httpauth::middleware::HttpAuthentication;
 use serde::Serialize;
+
 use std::sync::Mutex;
+
+mod api_tokens;
+
+async fn validator(
+    req: ServiceRequest,
+    _credentials: BasicAuth,
+) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
+    // TODO: add business logic that restricts
+    Ok(req)
+}
 
 #[derive(Serialize)]
 struct Temperature {
@@ -86,8 +101,14 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(counts.clone())
-            .service(to_celsius)
-            .service(to_fahrenheit)
+            .service(
+                scope("/api")
+                    .wrap(HttpAuthentication::basic(validator))
+                    .service(to_fahrenheit)
+                    .service(to_celsius),
+            )
+            .service(usage_statistics)
+            .service(reset_usage_statistics)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

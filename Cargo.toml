@@ -6,4 +6,6 @@ version = "0.1.0"
 
 [dependencies]
 actix-web = "4"
-serde = {version = "1.0.204", features = ["derive"]}
+actix-web-httpauth = "0.8"
+fastrand = "2.1.1"
+serde = { version = "1.0.204", features = ["derive"] }
