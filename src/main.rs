@@ -1,7 +1,8 @@
 use actix_web::dev::ServiceRequest;
 use actix_web::web::scope;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::extractors::basic::BasicAuth;
+use actix_web_httpauth::headers::authorization::Authorization;
 use actix_web_httpauth::middleware::HttpAuthentication;
 use serde::Serialize;
 
@@ -11,10 +12,18 @@ mod api_tokens;
 
 async fn validator(
     req: ServiceRequest,
-    _credentials: BasicAuth,
+    credentials: BasicAuth,
 ) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
-    // TODO: add business logic that restricts
-    Ok(req)
+    let token = credentials.user_id();
+
+    match api_tokens::is_token_allowed_access(token) {
+        Ok(true) => Ok(req),
+        Ok(false) => Err((
+            actix_web::error::ErrorUnauthorized("Supplied token is not authorized."),
+            req,
+        )),
+        Err(_) => Err((actix_web::error::ErrorInternalServerError(""), req)),
+    }
 }
 
 #[derive(Serialize)]
@@ -91,6 +100,24 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
     HttpResponse::NoContent()
 }
 
+#[get("/api-token")]
+async fn request_token() -> actix_web::Result<impl Responder> {
+    let token = api_tokens::create_token();
+
+    api_tokens::store_token(&token)?;
+
+    Ok(token + "\r\n")
+}
+
+#[delete("/api-token")]
+async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
+    let token = auth.user_id();
+
+    api_tokens::revoke_token(token)?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let counts = web::Data::new(UsageStats {
@@ -107,6 +134,8 @@ async fn main() -> std::io::Result<()> {
                     .service(to_fahrenheit)
                     .service(to_celsius),
             )
+            .service(request_token)
+            .service(delete_token)
             .service(usage_statistics)
             .service(reset_usage_statistics)
     })
