@@ -2,7 +2,6 @@ use actix_web::dev::ServiceRequest;
 use actix_web::web::scope;
 use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::extractors::basic::BasicAuth;
-use actix_web_httpauth::headers::authorization::Authorization;
 use actix_web_httpauth::middleware::HttpAuthentication;
 use serde::Serialize;
 
