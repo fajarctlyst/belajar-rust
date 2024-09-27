@@ -1,13 +1,18 @@
 use actix_web::dev::ServiceRequest;
 use actix_web::web::scope;
-use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{delete, error, get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web_httpauth::extractors;
 use actix_web_httpauth::extractors::basic::BasicAuth;
 use actix_web_httpauth::middleware::HttpAuthentication;
+use chrono::Utc;
+use db::Query;
+use r2d2_sqlite::SqliteConnectionManager;
 use serde::Serialize;
 
 use std::sync::Mutex;
 
 mod api_tokens;
+mod db;
 
 async fn validator(
     req: ServiceRequest,
@@ -43,10 +48,26 @@ struct UsageStatsResponse {
 }
 
 #[get("/to-celsius/{fahrenheit}")]
-async fn to_celsius(f: web::Path<f32>, stats: web::Data<UsageStats>) -> impl Responder {
+async fn to_celsius(
+    f: web::Path<f32>,
+    stats: web::Data<UsageStats>,
+    database: web::Data<db::Pool>,
+    auth: extractors::basic::BasicAuth,
+) -> impl Responder {
+    let now = Utc::now();
+
     actix_web::rt::spawn(async move {
         let mut count = stats.to_celsius.lock().unwrap();
         *count += 1;
+    });
+
+    actix_web::rt::spawn(async move {
+        let query = db::Query::RecordApiUsage {
+            api_key: auth.user_id().to_string(),
+            endpoint: db::ApiEndpoint::ToFahrenheit,
+            called_at: now,
+        };
+        query.execute(&database.into_inner()).await
     });
 
     let f = f.into_inner();
@@ -58,11 +79,31 @@ async fn to_celsius(f: web::Path<f32>, stats: web::Data<UsageStats>) -> impl Res
 }
 
 #[get("/to-fahrenheit/{celsius}")]
-async fn to_fahrenheit(c: web::Path<f32>, stats: web::Data<UsageStats>) -> impl Responder {
+async fn to_fahrenheit(
+    c: web::Path<f32>,
+    stats: web::Data<UsageStats>,
+    database: web::Data<db::Pool>,
+    auth: extractors::basic::BasicAuth,
+) -> impl Responder {
+    let now = Utc::now();
+
     actix_web::rt::spawn(async move {
         let mut count = stats.to_fahrenheit.lock().unwrap();
         *count += 1;
     });
+
+    //actix_web::rt::spawn();
+    async {
+        let query = db::Query::RecordApiUsage {
+            api_key: auth.user_id().to_string(),
+            endpoint: db::ApiEndpoint::ToFahrenheit,
+            called_at: now,
+        };
+        query.execute(&database.into_inner()).await
+    }
+    .await
+    .map_err(error::ErrorInternalServerError)
+    .unwrap();
 
     let c = c.into_inner();
     let f = 32.0 + (c * 1.8);
@@ -119,6 +160,10 @@ async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let manager = SqliteConnectionManager::file(db::DB_FILE);
+    let db_pool = db::Pool::new(manager).unwrap();
+    db::setup(db_pool.clone());
+
     let counts = web::Data::new(UsageStats {
         to_fahrenheit: Mutex::new(0),
         to_celsius: Mutex::new(0),
@@ -127,6 +172,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(counts.clone())
+            .app_data(web::Data::new(db_pool.clone()))
             .service(
                 scope("/api")
                     .wrap(HttpAuthentication::basic(validator))
