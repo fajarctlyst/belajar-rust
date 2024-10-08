@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 use std::error::Error;
-use std::io::Write;
 use std::iter::repeat_with;
 use std::sync::{Arc, LazyLock, RwLock};
+
+use actix_web::web;
+
+use crate::db;
 
 #[cfg(target_os = "windows")]
 const NEWLINE: &str = "\r\n";
@@ -20,48 +23,42 @@ pub fn create_token() -> String {
     repeat_with(fastrand::alphanumeric).take(40).collect()
 }
 
-pub fn load_tokens() -> Result<()> {
-    let stored_tokens = std::fs::read_to_string(TOKENS_FILE)?;
+pub fn load_tokens(database: web::Data<db::Pool>) -> Result<()> {
+    let conn = database
+        .get()
+        .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    let mut tokens = TOKENS.write()?;
+    let mut stmt = conn.prepare(
+        "
+        SELECT  api_key
+        FROM    api_keys
+        WHERE   revoked_at IS NOT NULL
+    ;",
+    )?;
 
-    for line in stored_tokens.lines() {
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
+    let rows = stmt.query_map((), |row| row.get(0))?;
 
-        let token = line.trim().to_string();
-        tokens.insert(token);
+    let mut tokens: std::sync::RwLockWriteGuard<'_, HashSet<String>> = TOKENS.write()?;
+
+    for row in rows {
+        tokens.insert(row?);
     }
 
     Ok(())
 }
 
-pub fn store_token(token: &str) -> Result<()> {
-    let mut f = std::fs::File::options()
-        .create(true)
-        .append(true)
-        .open(TOKENS_FILE)?;
-    write!(f, "{token}{NEWLINE}")?;
+pub async fn store_token(database: web::Data<db::Pool>, token: String) -> Result<()> {
+    let query = db::Query::RevokeApiKey(token);
+    query.execute(database.clone()).await?;
 
-    load_tokens()
+    load_tokens(database.clone())
 }
 
-pub fn revoke_token(token: &str) -> Result<()> {
-    {
-        let mut tokens = TOKENS.write()?;
-        tokens.remove(token);
-    }
+pub async fn revoke_token(database: web::Data<db::Pool>, token: String) -> Result<()> {
+    let query = db::Query::RevokeApiKey(token);
+    query.execute(database.clone()).await?;
 
-    {
-        let tokens = TOKENS.read()?;
-        let mut f = std::fs::File::options().write(true).open(TOKENS_FILE)?;
-        for token in tokens.iter() {
-            write!(f, "{token}{NEWLINE}")?;
-        }
-    }
-
-    load_tokens()
+    load_tokens(database.clone())
 }
 
 pub fn is_token_allowed_access(token: &str) -> Result<bool> {

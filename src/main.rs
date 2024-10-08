@@ -5,7 +5,6 @@ use actix_web_httpauth::extractors;
 use actix_web_httpauth::extractors::basic::BasicAuth;
 use actix_web_httpauth::middleware::HttpAuthentication;
 use chrono::Utc;
-use db::Query;
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::Serialize;
 
@@ -67,7 +66,7 @@ async fn to_celsius(
             endpoint: db::ApiEndpoint::ToFahrenheit,
             called_at: now,
         };
-        query.execute(&database.into_inner()).await
+        query.execute(database).await
     });
 
     let f = f.into_inner();
@@ -92,14 +91,13 @@ async fn to_fahrenheit(
         *count += 1;
     });
 
-    //actix_web::rt::spawn();
     async {
         let query = db::Query::RecordApiUsage {
             api_key: auth.user_id().to_string(),
             endpoint: db::ApiEndpoint::ToFahrenheit,
             called_at: now,
         };
-        query.execute(&database.into_inner()).await
+        query.execute(database).await
     }
     .await
     .map_err(error::ErrorInternalServerError)
@@ -141,19 +139,37 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
 }
 
 #[get("/api-token")]
-async fn request_token() -> actix_web::Result<impl Responder> {
-    let token = api_tokens::create_token();
+async fn request_token(database: web::Data<db::Pool>) -> actix_web::Result<impl Responder> {
+    let mut token = api_tokens::create_token();
 
-    api_tokens::store_token(&token)?;
+    async {
+        let query = db::Query::CreateApiKey(token.clone());
+        query.execute(database.clone()).await
+    }
+    .await
+    .map_err(error::ErrorInternalServerError)
+    .unwrap();
 
-    Ok(token + "\r\n")
+    let token_dupe = token.clone();
+    web::block(move || api_tokens::store_token(database.clone(), token_dupe))
+        .await?
+        .await?;
+
+    token.push_str("\r\n");
+
+    Ok(token)
 }
 
 #[delete("/api-token")]
-async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
-    let token = auth.user_id();
+async fn delete_token(
+    auth: BasicAuth,
+    database: web::Data<db::Pool>,
+) -> actix_web::Result<impl Responder> {
+    let token = auth.user_id().to_owned();
 
-    api_tokens::revoke_token(token)?;
+    web::block(|| api_tokens::revoke_token(database, token))
+        .await?
+        .await?;
 
     Ok(HttpResponse::NoContent().finish())
 }

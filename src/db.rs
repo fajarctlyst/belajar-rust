@@ -27,7 +27,15 @@ pub fn setup(pool: Pool) {
     api_key TEXT,
     endpoint TEXT,
     called_at TEXT
-  );",
+  );
+
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id INTEGER PRIMARY KEY,
+    api_key TEXT,
+    created_at TEXT NOT NULL,
+    revoked_at TEXT,
+  );
+  ",
         (),
     )
     .expect("unable to create database tables");
@@ -94,13 +102,13 @@ pub enum Query {
         endpoint: ApiEndpoint,
         called_at: DateTime<Utc>,
     },
+    CreateApiKey(String),
+    RevokeApiKey(String),
 }
 
 impl Query {
-    pub async fn execute(self, connection_pool: &Pool) -> Result<(), Error> {
-        let pool = connection_pool.clone();
-
-        let conn = web::block(move || pool.get())
+    pub async fn execute(self, database: web::Data<Pool>) -> Result<(), Error> {
+        let conn = web::block(move || database.get())
             .await?
             .map_err(error::ErrorInternalServerError)?;
 
@@ -121,6 +129,43 @@ impl Query {
 
                 let _n_rows = stmt
                     .execute((api_key, endpoint, called_at))
+                    .map_err(error::ErrorInternalServerError)?;
+
+                Ok(())
+            }
+            Query::CreateApiKey(key) => {
+                let sql = "
+                INSERT INTO api_keys (key, created_at)
+                VALUES (?1, ?2);
+                ";
+
+                let now = Utc::now();
+
+                let mut stmt = conn
+                    .prepare_cached(sql)
+                    .map_err(error::ErrorInternalServerError)?;
+
+                let _n_rows = stmt
+                    .execute((key, now))
+                    .map_err(error::ErrorInternalServerError)?;
+
+                Ok(())
+            }
+            Query::RevokeApiKey(key) => {
+                let sql = "
+                INSERT INTO api_keys (revoked_at) 
+                VALUES (?1)
+                WHERE key = ?2;
+                ";
+
+                let now = Utc::now();
+
+                let mut stmt = conn
+                    .prepare_cached(sql)
+                    .map_err(error::ErrorInternalServerError)?;
+
+                let _n_rows = stmt
+                    .execute((now, key))
                     .map_err(error::ErrorInternalServerError)?;
 
                 Ok(())
