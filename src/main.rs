@@ -2,21 +2,20 @@ use actix_web::dev::ServiceRequest;
 use actix_web::web::scope;
 use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::extractors::basic::BasicAuth;
-use actix_web_httpauth::headers::authorization::Authorization;
 use actix_web_httpauth::middleware::HttpAuthentication;
 use serde::Serialize;
 
 use std::sync::Mutex;
 
-mod api_tokens;
+mod auth;
 
 async fn validator(
     req: ServiceRequest,
     credentials: BasicAuth,
 ) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
-    let token = credentials.user_id();
+    let api_key = credentials.user_id();
 
-    match api_tokens::is_token_allowed_access(token) {
+    match auth::is_key_allowed_access(api_key) {
         Ok(true) => Ok(req),
         Ok(false) => Err((
             actix_web::error::ErrorUnauthorized("Supplied token is not authorized."),
@@ -102,9 +101,9 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
 
 #[get("/api-token")]
 async fn request_token() -> actix_web::Result<impl Responder> {
-    let token = api_tokens::create_token();
+    let token = auth::create_api_key();
 
-    api_tokens::store_token(&token)?;
+    auth::store_api_key(&token)?;
 
     Ok(token + "\r\n")
 }
@@ -113,7 +112,7 @@ async fn request_token() -> actix_web::Result<impl Responder> {
 async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
     let token = auth.user_id();
 
-    api_tokens::revoke_token(token)?;
+    auth::revoke_api_key(token)?;
 
     Ok(HttpResponse::NoContent().finish())
 }
