@@ -13,7 +13,7 @@ async fn validator(
     req: ServiceRequest,
     _credentials: BasicAuth,
 ) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
-    // TODO: add business logic that restricts
+    // TODO: add business logic that restricts access to authorized requests
     Ok(req)
 }
 
