@@ -5,7 +5,7 @@ use ring::{aead, rand};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::read_to_string;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::iter::repeat_with;
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -16,6 +16,7 @@ const MASTER_KEY_LENGTH: usize = 32;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
+#[allow(clippy::type_complexity)]
 static API_KEYS: LazyLock<Arc<RwLock<HashMap<String, Vec<u8>>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
