@@ -23,9 +23,21 @@ struct Temperature {
     celsius: f32,
 }
 
+#[derive(Default)]
 struct UsageStats {
-    to_fahrenheit: Mutex<u32>,
-    to_celsius: Mutex<u32>,
+    counters: Mutex<Counters>,
+}
+
+impl UsageStats {
+    fn new() -> Self {
+        UsageStats::default()
+    }
+}
+
+#[derive(Default)]
+struct Counters {
+    to_fahrenheit: u32,
+    to_celsius: u32,
 }
 
 #[derive(Serialize)]
@@ -37,8 +49,8 @@ struct UsageStatsResponse {
 #[get("/to-celsius/{fahrenheit}")]
 async fn to_celsius(f: web::Path<f32>, stats: web::Data<UsageStats>) -> impl Responder {
     actix_web::rt::spawn(async move {
-        let mut count = stats.to_celsius.lock().unwrap();
-        *count += 1;
+        let mut counts = stats.counters.lock().unwrap();
+        counts.to_celsius += 1;
     });
 
     let f = f.into_inner();
@@ -52,8 +64,8 @@ async fn to_celsius(f: web::Path<f32>, stats: web::Data<UsageStats>) -> impl Res
 #[get("/to-fahrenheit/{celsius}")]
 async fn to_fahrenheit(c: web::Path<f32>, stats: web::Data<UsageStats>) -> impl Responder {
     actix_web::rt::spawn(async move {
-        let mut count = stats.to_fahrenheit.lock().unwrap();
-        *count += 1;
+        let mut counts = stats.counters.lock().unwrap();
+        counts.to_fahrenheit += 1;
     });
 
     let c = c.into_inner();
@@ -66,27 +78,25 @@ async fn to_fahrenheit(c: web::Path<f32>, stats: web::Data<UsageStats>) -> impl 
 
 #[get("/usage-statistics")]
 async fn usage_statistics(stats: web::Data<UsageStats>) -> impl Responder {
-    let mut fahrenheit_count = stats.to_fahrenheit.lock().unwrap();
-    let mut celsius_count = stats.to_fahrenheit.lock().unwrap();
+    let mut counts = stats.counters.lock().unwrap();
 
     let response = UsageStatsResponse {
-        to_fahrenheit: *fahrenheit_count,
-        to_celsius: *celsius_count,
+        to_fahrenheit: counts.to_fahrenheit,
+        to_celsius: counts.to_celsius,
     };
 
-    *fahrenheit_count = 0;
-    *celsius_count = 0;
+    counts.to_fahrenheit = 0;
+    counts.to_celsius = 0;
 
     web::Json(response)
 }
 
 #[post("/reset-usage-statistics")]
 async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder {
-    let mut fahrenheit_count = stats.to_fahrenheit.lock().unwrap();
-    let mut celsius_count = stats.to_fahrenheit.lock().unwrap();
+    let mut counts = stats.counters.lock().unwrap();
 
-    *fahrenheit_count = 0;
-    *celsius_count = 0;
+    counts.to_fahrenheit = 0;
+    counts.to_celsius = 0;
 
     HttpResponse::NoContent()
 }
@@ -108,10 +118,9 @@ async fn delete_api_key(_auth: BasicAuth) -> actix_web::Result<impl Responder> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let counts = web::Data::new(UsageStats {
-        to_fahrenheit: Mutex::new(0),
-        to_celsius: Mutex::new(0),
-    });
+    auth::load_api_keys().expect("unable to load API keys");
+
+    let counts = web::Data::new(UsageStats::new());
 
     // TODO: add the api-key handlers to the App
     HttpServer::new(move || {
