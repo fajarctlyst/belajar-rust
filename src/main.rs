@@ -99,8 +99,8 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
     HttpResponse::NoContent()
 }
 
-#[get("/api-token")]
-async fn request_token() -> actix_web::Result<impl Responder> {
+#[get("/api-key")]
+async fn request_api_key() -> actix_web::Result<impl Responder> {
     let token = auth::create_api_key();
 
     auth::store_api_key(&token)?;
@@ -108,8 +108,8 @@ async fn request_token() -> actix_web::Result<impl Responder> {
     Ok(token + "\r\n")
 }
 
-#[delete("/api-token")]
-async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
+#[delete("/api-key")]
+async fn delete_api_key(auth: BasicAuth) -> actix_web::Result<impl Responder> {
     let token = auth.user_id();
 
     auth::revoke_api_key(token)?;
@@ -119,6 +119,8 @@ async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    auth::load_api_keys().expect("unable to load API keys");
+
     let counts = web::Data::new(UsageStats {
         to_fahrenheit: Mutex::new(0),
         to_celsius: Mutex::new(0),
@@ -133,8 +135,8 @@ async fn main() -> std::io::Result<()> {
                     .service(to_fahrenheit)
                     .service(to_celsius),
             )
-            .service(request_token)
-            .service(delete_token)
+            .service(request_api_key)
+            .service(delete_api_key)
             .service(usage_statistics)
             .service(reset_usage_statistics)
     })
