@@ -1,7 +1,5 @@
 use actix_web::{test, web, App};
-use actix_web_httpauth::extractors::basic::BasicAuth;
 use r2d2_sqlite::SqliteConnectionManager;
-use serde_json::json;
 
 use hello_actix::{
     auth, db, delete_api_key, request_api_key, reset_usage_statistics, to_celsius, to_fahrenheit,
