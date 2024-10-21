@@ -196,13 +196,7 @@ impl Query {
 
                 let now = Utc::now();
 
-                let mut stmt = conn
-                    .prepare_cached(sql)
-                    .map_err(error::ErrorInternalServerError)?;
-
-                let _n_rows = stmt
-                    .execute((now, key))
-                    .map_err(error::ErrorInternalServerError)?;
+                // TODO: execute SQL for this query
 
                 Ok(None)
             }
