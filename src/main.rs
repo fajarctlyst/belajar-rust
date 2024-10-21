@@ -1,6 +1,6 @@
 use actix_web::dev::ServiceRequest;
 use actix_web::web::scope;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::extractors::basic::BasicAuth;
 use actix_web_httpauth::middleware::HttpAuthentication;
 use serde::Serialize;
@@ -91,6 +91,21 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
     HttpResponse::NoContent()
 }
 
+#[get("/api-key")]
+async fn request_api_key() -> actix_web::Result<impl Responder> {
+    // TODO: replace with functionality to generate a unique key
+    let api_key = String::from("12345");
+
+    Ok(api_key + "\r\n")
+}
+
+#[delete("/api-key")]
+async fn delete_api_key(_auth: BasicAuth) -> actix_web::Result<impl Responder> {
+    // TODO: actually delete the api_key
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let counts = web::Data::new(UsageStats {
@@ -98,6 +113,7 @@ async fn main() -> std::io::Result<()> {
         to_celsius: Mutex::new(0),
     });
 
+    // TODO: add the api-key handlers to the App
     HttpServer::new(move || {
         App::new()
             .app_data(counts.clone())
