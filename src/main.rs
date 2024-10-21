@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use std::sync::Mutex;
 
-mod api_tokens;
+mod auth;
 
 async fn validator(
     req: ServiceRequest,
