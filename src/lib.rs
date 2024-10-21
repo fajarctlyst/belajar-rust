@@ -42,7 +42,7 @@ pub struct UsageStats {
 }
 
 #[derive(Default)]
-struct Counters {
+pub struct Counters {
     to_celsius: u32,
     to_fahrenheit: u32,
 }
