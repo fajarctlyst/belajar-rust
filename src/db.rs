@@ -1,18 +1,18 @@
 // Pattern extracted from the official SQLite example
 // https://github.com/actix/examples/blob/master/databases/sqlite/src/db.rs
 use chrono::{DateTime, Utc};
-use std::{path::Display, thread::sleep, time::Duration};
 
 use actix_web::{error, web, Error};
 
 pub type Pool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
-pub type Connection = r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>;
+//
+// pub type Connection = r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>;
 
 pub const DB_FILE: &str = "api-db.sqlite";
 
 use rusqlite::{
     types::{FromSql, FromSqlError, ToSqlOutput},
-    Statement, ToSql,
+    ToSql,
 };
 
 /// Deliberately not marked async, because it is not intended to be used while
@@ -22,23 +22,37 @@ pub fn setup(pool: Pool) {
 
     conn.execute(
         "
-  CREATE TABLE IF NOT EXISTS usage (
-    id INTEGER PRIMARY KEY,
-    api_key TEXT,
-    endpoint TEXT,
-    called_at TEXT
-  );
+    CREATE TABLE IF NOT EXISTS usage (
+        id INTEGER PRIMARY KEY,
+        api_key TEXT,
+        endpoint TEXT,
+        called_at TEXT
+    );",
+        (),
+    )
+    .expect("unable to create `usage` table");
 
-  CREATE TABLE IF NOT EXISTS api_keys (
-    id INTEGER PRIMARY KEY,
-    api_key TEXT,
-    created_at TEXT NOT NULL,
-    revoked_at TEXT,
-  );
+    conn.execute(
+        "
+    CREATE TABLE IF NOT EXISTS api_keys (
+        id INTEGER PRIMARY KEY,
+        salt TEXT,
+        api_key TEXT,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT
+    );",
+        (),
+    )
+    .expect("unable to create `api_keys` table");
+
+    conn.execute(
+        "
+    CREATE INDEX IF NOT EXISTS api_keys_api_key_idx 
+    ON api_keys (api_key);
   ",
         (),
     )
-    .expect("unable to create database tables");
+    .expect("unable to create `api_keys_api_key_idx` index");
 }
 
 #[derive(Debug)]
@@ -97,22 +111,44 @@ impl FromSql for ApiEndpoint {
 }
 
 pub enum Query {
+    // CheckApiKey(String),
     RecordApiUsage {
         api_key: String,
         endpoint: ApiEndpoint,
         called_at: DateTime<Utc>,
     },
-    CreateApiKey(String),
     RevokeApiKey(String),
+    StoreApiKey {
+        salt: String,
+        api_key: String,
+    },
 }
 
 impl Query {
-    pub async fn execute(self, database: web::Data<Pool>) -> Result<(), Error> {
+    pub async fn execute(self, database: web::Data<Pool>) -> Result<Option<bool>, Error> {
         let conn = web::block(move || database.get())
             .await?
             .map_err(error::ErrorInternalServerError)?;
 
         match self {
+            // Query::CheckApiKey(key) => {
+            //     let sql = "
+            //     SELECT 1
+            //     FROM api_keys
+            //     WHERE api_key = ?1 AND revoked_at IS NULL
+            //     ";
+
+            //     let mut stmt = conn
+            //         .prepare_cached(sql)
+            //         .map_err(error::ErrorInternalServerError)?;
+
+            //     let result: Option<i32> = stmt
+            //         .query_row((key,), |row| row.get(0))
+            //         .optional()
+            //         .map_err(error::ErrorInternalServerError)?;
+
+            //     Ok(Some(result.is_some()))
+            // }
             Query::RecordApiUsage {
                 api_key,
                 endpoint,
@@ -131,12 +167,12 @@ impl Query {
                     .execute((api_key, endpoint, called_at))
                     .map_err(error::ErrorInternalServerError)?;
 
-                Ok(())
+                Ok(None)
             }
-            Query::CreateApiKey(key) => {
+            Query::StoreApiKey { api_key, salt } => {
                 let sql = "
-                INSERT INTO api_keys (key, created_at)
-                VALUES (?1, ?2);
+                INSERT INTO api_keys (api_key, salt, created_at)
+                VALUES (?1, ?2, ?3);
                 ";
 
                 let now = Utc::now();
@@ -146,16 +182,16 @@ impl Query {
                     .map_err(error::ErrorInternalServerError)?;
 
                 let _n_rows = stmt
-                    .execute((key, now))
+                    .execute((api_key, salt, now))
                     .map_err(error::ErrorInternalServerError)?;
 
-                Ok(())
+                Ok(None)
             }
             Query::RevokeApiKey(key) => {
                 let sql = "
-                INSERT INTO api_keys (revoked_at) 
-                VALUES (?1)
-                WHERE key = ?2;
+                UPDATE api_keys
+                SET revoked_at = ?1 
+                WHERE api_key = ?2;
                 ";
 
                 let now = Utc::now();
@@ -168,7 +204,7 @@ impl Query {
                     .execute((now, key))
                     .map_err(error::ErrorInternalServerError)?;
 
-                Ok(())
+                Ok(None)
             }
         }
     }

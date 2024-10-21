@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use std::sync::Mutex;
 
-mod api_tokens;
+mod auth;
 mod db;
 
 async fn validator(
@@ -19,7 +19,7 @@ async fn validator(
 ) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
     let token = credentials.user_id();
 
-    match api_tokens::is_token_allowed_access(token) {
+    match auth::is_key_allowed_access(token) {
         Ok(true) => Ok(req),
         Ok(false) => Err((
             actix_web::error::ErrorUnauthorized("Supplied token is not authorized."),
@@ -138,36 +138,28 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
     HttpResponse::NoContent()
 }
 
-#[get("/api-token")]
-async fn request_token(database: web::Data<db::Pool>) -> actix_web::Result<impl Responder> {
-    let mut token = api_tokens::create_token();
+#[get("/api-key")]
+async fn request_api_key(database: web::Data<db::Pool>) -> actix_web::Result<impl Responder> {
+    let mut api_key = auth::create_api_key();
 
-    async {
-        let query = db::Query::CreateApiKey(token.clone());
-        query.execute(database.clone()).await
-    }
-    .await
-    .map_err(error::ErrorInternalServerError)
-    .unwrap();
-
-    let token_dupe = token.clone();
-    web::block(move || api_tokens::store_token(database.clone(), token_dupe))
+    let api_key_ = api_key.clone();
+    web::block(move || auth::store_api_key(database.clone(), api_key_))
         .await?
         .await?;
 
-    token.push_str("\r\n");
+    api_key.push_str("\r\n");
 
-    Ok(token)
+    Ok(api_key)
 }
 
-#[delete("/api-token")]
-async fn delete_token(
+#[delete("/api-key")]
+async fn delete_api_key(
     auth: BasicAuth,
     database: web::Data<db::Pool>,
 ) -> actix_web::Result<impl Responder> {
     let token = auth.user_id().to_owned();
 
-    web::block(|| api_tokens::revoke_token(database, token))
+    web::block(|| auth::revoke_api_key(database, token))
         .await?
         .await?;
 
@@ -195,8 +187,8 @@ async fn main() -> std::io::Result<()> {
                     .service(to_fahrenheit)
                     .service(to_celsius),
             )
-            .service(request_token)
-            .service(delete_token)
+            .service(request_api_key)
+            .service(delete_api_key)
             .service(usage_statistics)
             .service(reset_usage_statistics)
     })
