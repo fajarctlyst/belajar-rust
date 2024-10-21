@@ -5,13 +5,12 @@ use actix_web_httpauth::extractors;
 use actix_web_httpauth::extractors::basic::BasicAuth;
 use actix_web_httpauth::middleware::HttpAuthentication;
 use chrono::Utc;
-use db::Query;
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::Serialize;
 
 use std::sync::Mutex;
 
-mod api_tokens;
+mod auth;
 mod db;
 
 async fn validator(
@@ -20,7 +19,7 @@ async fn validator(
 ) -> Result<ServiceRequest, (actix_web::Error, ServiceRequest)> {
     let token = credentials.user_id();
 
-    match api_tokens::is_token_allowed_access(token) {
+    match auth::is_key_allowed_access(token) {
         Ok(true) => Ok(req),
         Ok(false) => Err((
             actix_web::error::ErrorUnauthorized("Supplied token is not authorized."),
@@ -67,7 +66,7 @@ async fn to_celsius(
             endpoint: db::ApiEndpoint::ToFahrenheit,
             called_at: now,
         };
-        query.execute(&database.into_inner()).await
+        query.execute(database).await
     });
 
     let f = f.into_inner();
@@ -92,14 +91,13 @@ async fn to_fahrenheit(
         *count += 1;
     });
 
-    //actix_web::rt::spawn();
     async {
         let query = db::Query::RecordApiUsage {
             api_key: auth.user_id().to_string(),
             endpoint: db::ApiEndpoint::ToFahrenheit,
             called_at: now,
         };
-        query.execute(&database.into_inner()).await
+        query.execute(database).await
     }
     .await
     .map_err(error::ErrorInternalServerError)
@@ -140,20 +138,30 @@ async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Responder 
     HttpResponse::NoContent()
 }
 
-#[get("/api-token")]
-async fn request_token() -> actix_web::Result<impl Responder> {
-    let token = api_tokens::create_token();
+#[get("/api-key")]
+async fn request_api_key(database: web::Data<db::Pool>) -> actix_web::Result<impl Responder> {
+    let mut api_key = auth::create_api_key();
 
-    api_tokens::store_token(&token)?;
+    let api_key_ = api_key.clone();
+    web::block(move || auth::store_api_key(database.clone(), api_key_))
+        .await?
+        .await?;
 
-    Ok(token + "\r\n")
+    api_key.push_str("\r\n");
+
+    Ok(api_key)
 }
 
-#[delete("/api-token")]
-async fn delete_token(auth: BasicAuth) -> actix_web::Result<impl Responder> {
-    let token = auth.user_id();
+#[delete("/api-key")]
+async fn delete_api_key(
+    auth: BasicAuth,
+    database: web::Data<db::Pool>,
+) -> actix_web::Result<impl Responder> {
+    let token = auth.user_id().to_owned();
 
-    api_tokens::revoke_token(token)?;
+    web::block(|| auth::revoke_api_key(database, token))
+        .await?
+        .await?;
 
     Ok(HttpResponse::NoContent().finish())
 }
@@ -179,8 +187,8 @@ async fn main() -> std::io::Result<()> {
                     .service(to_fahrenheit)
                     .service(to_celsius),
             )
-            .service(request_token)
-            .service(delete_token)
+            .service(request_api_key)
+            .service(delete_api_key)
             .service(usage_statistics)
             .service(reset_usage_statistics)
     })
