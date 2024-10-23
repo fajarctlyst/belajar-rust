@@ -3,6 +3,8 @@ use actix_web::{delete, error, get, post, web, HttpResponse, Responder};
 use actix_web_httpauth::extractors;
 use actix_web_httpauth::extractors::basic::BasicAuth;
 use chrono::Utc;
+use serde::Serialize;
+use tracing::instrument;
 
 use std::sync::Mutex;
 
@@ -31,13 +33,13 @@ pub struct Temperature {
     celsius: f32,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct UsageStats {
     pub counters: Mutex<Counters>,
 }
 
-#[derive(Default)]
-struct Counters {
+#[derive(Default, Debug)]
+pub struct Counters {
     to_celsius: u32,
     to_fahrenheit: u32,
 }
@@ -55,6 +57,7 @@ struct UsageStatsResponse {
 }
 
 #[get("/to-celsius/{fahrenheit}")]
+#[instrument(skip(stats, database, auth))]
 pub async fn to_celsius(
     f: web::Path<f32>,
     stats: web::Data<UsageStats>,
@@ -86,6 +89,7 @@ pub async fn to_celsius(
 }
 
 #[get("/to-fahrenheit/{celsius}")]
+#[instrument(skip(stats, database, auth))]
 pub async fn to_fahrenheit(
     c: web::Path<f32>,
     stats: web::Data<UsageStats>,
@@ -145,6 +149,7 @@ pub async fn reset_usage_statistics(stats: web::Data<UsageStats>) -> impl Respon
 }
 
 #[get("/api-key")]
+#[instrument(skip(database))]
 pub async fn request_api_key(database: web::Data<db::Pool>) -> actix_web::Result<impl Responder> {
     let mut api_key = auth::create_api_key();
 
