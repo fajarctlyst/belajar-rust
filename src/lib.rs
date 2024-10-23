@@ -1,14 +1,9 @@
 use actix_web::dev::ServiceRequest;
-use actix_web::web::scope;
-use actix_web::{delete, error, get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{delete, error, get, post, web, HttpResponse, Responder};
 use actix_web_httpauth::extractors;
 use actix_web_httpauth::extractors::basic::BasicAuth;
-use actix_web_httpauth::middleware::HttpAuthentication;
 use chrono::Utc;
-use r2d2_sqlite::SqliteConnectionManager;
-use serde::Serialize;
 
-use std::default;
 use std::sync::Mutex;
 
 pub mod auth;
