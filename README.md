@@ -1,5 +1,11 @@
-# Creating High Performance Web Services with Async Rust
-This is the repository for the LinkedIn Learning course `Creating High Performance Web Services with Async Rust`. The full course is available from [LinkedIn Learning][lil-course-url].
+# Web APIs in Rust
+This is the repository for the LinkedIn Learning course `Web APIs in Rust`. The full course is available from [LinkedIn Learning][lil-course-url].
+
+![lil-thumbnail-url]
+
+## Course Description
+
+<p>Rust is an extremely powerful and often intimidating language, but it’s particularly well-suited for web services. In this course, instructor Tim McNamara shows you how to get started building and deploying web services written in Rust. Learn how to use the Actix Web framework to create a service that can receive a payload via an HTTP POST request, process it and return JSON. Along the way, you’ll also explore the essentials of stateful endpoints, monitoring and observability, telemetry, testing, deployment, and much more.</p><p>This course is integrated with GitHub Codespaces, an instant cloud developer environment that offers all the functionality of your favorite IDE without the need for any local machine setup. With GitHub Codespaces, you can get hands-on practice from any machine, at any time-all while using a tool that you'll likely encounter in the workplace. Check out the "Using GitHub Codespaces with this course" video to learn how to get started.</p>
 
 _See the readme file in the main branch for updated instructions and information._
 ## Instructions
@@ -20,15 +26,18 @@ To resolve this issue:
     Add changes to git using this command: git add .
 	Commit changes using this command: git commit -m "some message"
 
-## Installing
-1. To use these exercise files, you must have the following installed:
-	- [list of requirements for course]
-2. Clone this repository into your local machine using the terminal (Mac), CMD (Windows), or a GUI tool like SourceTree.
-3. [Course-specific instructions]
+ ## Instructor
 
+Tim McNamara
+
+Rust Software Architect and Author
+
+                            
+
+Check out my other courses on [LinkedIn Learning](https://www.linkedin.com/learning/instructors/tim-mcnamara?u=104).
 
 [0]: # (Replace these placeholder URLs with actual course URLs)
 
-[lil-course-url]: https://www.linkedin.com/learning/
-[lil-thumbnail-url]: http://
+[lil-course-url]: https://www.linkedin.com/learning/web-apis-in-rust
+[lil-thumbnail-url]: https://media.licdn.com/dms/image/v2/D4D0DAQEGrD0k-w4voA/learning-public-crop_675_1200/learning-public-crop_675_1200/0/1734134386529?e=2147483647&v=beta&t=S68B1gssPfZkc6iL0PkhDM9sbVhHvqCsH8FPW5slA5w
 
